@@ -1,0 +1,751 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dimensionador de Frota CB</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+  /* Layout: parâmetros à esquerda, painel de resultado escuro à direita (barra fixa no celular); acompanhamento, indicadores, hora a hora, cenários e salvos abaixo. */
+  :root {
+    --bg: #E9EDEF;
+    --surface: #FFFFFF;
+    --ink: #14212B;
+    --muted: #55656F;
+    --line: #CBD3D8;
+    --accent: #C95500;
+    --panel: #14212B;
+    --panel-ink: #EEF2F4;
+    --panel-muted: #9FB0BA;
+    --hi: #F5A04A;
+    --ok: #1F7A45;
+    --warn: #B3261E;
+    --p-ok: #7BE0A0;
+    --p-warn: #FF9E96;
+    --bar: #C95500;
+    --bar-bg: #DCE3E7;
+    --font-display: "Barlow Condensed", "Arial Narrow", Impact, sans-serif;
+    --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0E151B; --surface: #16202A; --ink: #E7EDF1; --muted: #93A3AE; --line: #2A3843;
+      --accent: #F28C28; --panel: #0A1015; --panel-muted: #8A9BA6;
+      --ok: #5FD08A; --warn: #FF8A80; --bar: #F28C28; --bar-bg: #26333D;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0E151B; --surface: #16202A; --ink: #E7EDF1; --muted: #93A3AE; --line: #2A3843;
+    --accent: #F28C28; --panel: #0A1015; --panel-muted: #8A9BA6;
+    --ok: #5FD08A; --warn: #FF8A80; --bar: #F28C28; --bar-bg: #26333D;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-size: 15px;
+    line-height: 1.5;
+    padding-block: 24px 40px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+  .wrap { max-width: 1040px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+  header { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px 24px; flex-wrap: wrap; }
+  header > div { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+  .eyebrow { font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+  h1 { font-family: var(--font-display); font-weight: 700; font-size: clamp(32px, 6vw, 48px); line-height: 1; margin: 0; text-wrap: balance; letter-spacing: .01em; text-transform: uppercase; }
+  .lede { color: var(--muted); margin: 6px 0 0; max-width: 62ch; }
+
+  .main { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: 20px; align-items: start; }
+  .main > .panel { position: sticky; top: 16px; }
+  @media (max-width: 760px) { .main { grid-template-columns: minmax(0, 1fr); } .main > .panel { position: static; } }
+
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 20px; min-width: 0; }
+  h2 { font-family: var(--font-display); font-size: 22px; font-weight: 600; margin: 0 0 14px; text-transform: uppercase; letter-spacing: .03em; }
+  h2 small { font-family: var(--font-body); font-size: 12px; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--muted); margin-left: 8px; }
+
+  .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+  .field label, .legend { font-weight: 600; font-size: 14px; }
+  .field label small { font-weight: 400; color: var(--muted); }
+  .hint { font-size: 12.5px; color: var(--muted); margin: 0; }
+  .input-row { display: flex; align-items: stretch; }
+  .input-row input {
+    flex: 1; min-width: 0; font: inherit; font-size: 22px; font-weight: 500; font-variant-numeric: tabular-nums;
+    padding: 9px 12px; border: 1px solid var(--line); border-right: 0; border-radius: 4px 0 0 4px;
+    background: var(--bg); color: var(--ink);
+  }
+  .unit { display: flex; align-items: center; padding: 0 12px; background: var(--line); color: var(--ink); font-weight: 600; font-size: 13px; border-radius: 0 4px 4px 0; min-width: 52px; justify-content: center; white-space: nowrap; }
+  select.unit { font: inherit; font-weight: 600; font-size: 13px; border: 0; cursor: pointer; color: var(--ink); min-width: 96px; }
+  .st { width: 40px; padding: 0; border-radius: 0; background: var(--bg); color: var(--ink); border: 1px solid var(--line); border-right: 0; font-size: 20px; line-height: 1; font-weight: 500; }
+  .st:hover { background: var(--line); filter: none; }
+  input:focus-visible, select:focus-visible, .seg input:focus-visible + span, button:focus-visible, summary:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  input[aria-invalid="true"] { border-color: var(--warn); }
+
+  .two { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+  @media (max-width: 520px) { .two { grid-template-columns: minmax(0, 1fr); } }
+  .two .input-row input { font-size: 17px; }
+
+  details { margin-top: 4px; }
+  details.adv { border-top: 1px solid var(--line); padding-top: 14px; }
+  summary { cursor: pointer; font-weight: 600; font-size: 14px; margin-bottom: 14px; }
+  details:not([open]) > summary { margin-bottom: 0; }
+
+  fieldset { border: 0; padding: 0; margin: 0 0 14px; min-width: 0; }
+  .seg { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 6px; }
+  .seg label { display: block; cursor: pointer; position: relative; }
+  .seg input { position: absolute; opacity: 0; pointer-events: none; }
+  .seg span { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); font-weight: 600; font-size: 13.5px; height: 100%; }
+  .seg span small { font-weight: 400; color: var(--muted); font-size: 12px; }
+  .seg input:checked + span { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+
+  /* Painel de resultado */
+  .panel { background: var(--panel); color: var(--panel-ink); border: 1px solid var(--line); border-radius: 6px; padding: 22px; display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+  .panel .label { font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--panel-muted); font-weight: 600; }
+  .big { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  .big .n { font-family: var(--font-display); font-weight: 700; font-size: clamp(84px, 16vw, 128px); line-height: .9; color: var(--hi); font-variant-numeric: tabular-nums; }
+  .big .u { font-family: var(--font-display); font-size: 28px; font-weight: 600; text-transform: uppercase; }
+  .sub { color: var(--panel-muted); margin: 0; }
+  .sub b { color: var(--panel-ink); font-weight: 600; }
+  .alert { border-left: 3px solid var(--hi); padding: 8px 12px; background: rgba(245,160,74,.12); font-size: 13.5px; margin: 0; }
+  .fleet { border: 1px solid rgba(255,255,255,.16); border-radius: 4px; padding: 12px; display: flex; flex-direction: column; gap: 6px; }
+  .fleet p { margin: 0; font-size: 13.5px; color: var(--panel-muted); }
+  .fleet p b { color: var(--panel-ink); font-weight: 600; }
+  .pill { align-self: flex-start; display: inline-block; font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; padding: 3px 9px; border-radius: 3px; border: 1px solid currentColor; }
+  .pill.ok { color: var(--p-ok); }
+  .pill.warn { color: var(--p-warn); }
+  .surface-pill.ok { color: var(--ok); }
+  .surface-pill.warn { color: var(--warn); }
+  .compare { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; background: rgba(255,255,255,.14); border: 1px solid rgba(255,255,255,.14); border-radius: 4px; overflow: hidden; }
+  .compare div { background: var(--panel); padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; }
+  .compare .k { font-size: 12px; color: var(--panel-muted); }
+  .compare .v { font-family: var(--font-display); font-size: 26px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .compare .on .v { color: var(--hi); }
+  .actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  button { font: inherit; font-weight: 600; cursor: pointer; background: var(--hi); color: #14212B; border: 0; border-radius: 4px; padding: 10px 16px; }
+  button:hover { filter: brightness(1.06); }
+  button.ghost { background: transparent; color: var(--ink); border: 1px solid var(--line); padding: 8px 14px; font-size: 14px; }
+  button.ghost:hover { background: var(--line); filter: none; }
+  button.accent { background: var(--accent); color: #fff; }
+  .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(20px + env(safe-area-inset-bottom, 0px)); background: var(--panel); color: var(--panel-ink); border: 1px solid var(--line); padding: 10px 16px; border-radius: 4px; font-size: 14px; z-index: 40; max-width: calc(100vw - 32px); }
+  @media (max-width: 760px) { .toast { bottom: calc(84px + env(safe-area-inset-bottom, 0px)); } }
+
+  /* Barra fixa de resultado no celular */
+  .mini { display: none; position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; background: var(--panel); color: var(--panel-ink); border-top: 1px solid var(--line); align-items: baseline; gap: 10px; flex-wrap: wrap;
+    padding: 10px max(16px, env(safe-area-inset-right, 0px)) calc(10px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); }
+  .mini .n { font-family: var(--font-display); font-size: 40px; font-weight: 700; line-height: 1; color: var(--hi); font-variant-numeric: tabular-nums; }
+  .mini .u { font-family: var(--font-display); font-size: 18px; font-weight: 600; text-transform: uppercase; }
+  .mini .t { font-size: 13px; color: var(--panel-muted); flex: 1; min-width: 0; }
+  @media (max-width: 760px) { .mini.show { display: flex; } body { padding-bottom: 96px; } }
+
+  /* Indicadores */
+  dl.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 0; margin: 0; border-top: 1px solid var(--line); }
+  dl.kpis > div { padding: 12px 16px 12px 0; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 2px; }
+  dl.kpis dt { font-size: 12.5px; color: var(--muted); }
+  dl.kpis dd { margin: 0; font-family: var(--font-display); font-size: 28px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.1; }
+  dl.kpis dd small { font-family: var(--font-body); font-size: 13px; font-weight: 400; color: var(--muted); }
+  .track-in { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px; }
+  @media (max-width: 520px) { .track-in { grid-template-columns: minmax(0, 1fr); } }
+  .track-msg { margin: 0 0 14px; font-size: 14.5px; }
+  .track-msg b { font-weight: 600; }
+  .head-row { display: flex; align-items: center; gap: 10px 14px; flex-wrap: wrap; margin-bottom: 12px; }
+  .head-row .pill { align-self: center; }
+
+  /* Tabelas */
+  .tablewrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; min-width: 420px; }
+  th, td { text-align: left; padding: 9px 8px; border-bottom: 1px solid var(--line); font-size: 14px; }
+  th { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+  td.num, th.num { text-align: right; }
+  tr.cur td { font-weight: 600; background: color-mix(in srgb, var(--accent) 10%, transparent); }
+  .bar { height: 10px; background: var(--bar-bg); border-radius: 2px; min-width: 120px; }
+  .bar i { display: block; height: 100%; background: var(--bar); border-radius: 2px; }
+  .better { color: var(--ok); font-weight: 600; }
+  .worse { color: var(--warn); font-weight: 600; }
+  .foot { color: var(--muted); font-size: 12.5px; margin: 0; max-width: 80ch; }
+  .formula { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; font-size: 12.5px; background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 10px 12px; margin: 0 0 12px; overflow-x: auto; white-space: pre; }
+
+  /* Cenários salvos */
+  .save-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+  .save-row input { flex: 1 1 200px; min-width: 0; font: inherit; padding: 9px 12px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); color: var(--ink); }
+  ul.saved { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; border-top: 1px solid var(--line); }
+  ul.saved li { display: flex; gap: 8px; align-items: center; border-bottom: 1px solid var(--line); padding: 8px 0; }
+  ul.saved .load { flex: 1; min-width: 0; text-align: left; background: transparent; color: var(--ink); padding: 6px 8px; border-radius: 4px; font-weight: 500; }
+  ul.saved .load:hover { background: var(--bg); filter: none; }
+  ul.saved .load b { display: block; font-weight: 600; overflow-wrap: anywhere; }
+  ul.saved .load span { font-size: 12.5px; color: var(--muted); }
+  ul.saved .del { background: transparent; color: var(--muted); border: 1px solid var(--line); padding: 6px 10px; font-size: 13px; }
+  ul.saved .del:hover { color: var(--warn); filter: none; }
+  .empty { color: var(--muted); font-size: 13.5px; margin: 0; }
+  @media (prefers-reduced-motion: no-preference) { .big .n { transition: color .2s; } }
+</style>
+
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <span class="eyebrow">Operação de transporte · Frota de CBs</span>
+      <h1>Dimensionador de Frota CB</h1>
+      <p class="lede">Informe ciclo, prazo e meta e veja quantos CBs colocar na pista. Os últimos valores ficam salvos neste navegador.</p>
+    </div>
+    <button type="button" class="ghost" id="reset">Restaurar exemplo</button>
+  </header>
+
+  <div class="main">
+    <section class="card" aria-labelledby="h-in">
+      <h2 id="h-in">Parâmetros</h2>
+
+      <div class="field">
+        <label for="ciclo">Tempo de ciclo</label>
+        <div class="input-row"><input id="ciclo" data-step="1" type="text" inputmode="decimal" autocomplete="off"><select id="un" class="unit" aria-label="Unidade do tempo de ciclo"><option value="h">horas (decimal)</option><option value="min">minutos</option></select></div>
+        <p class="hint">Em decimal, 1,5 h equivale a 1h30. Vai do carregamento até o CB estar pronto para carregar de novo.</p>
+      </div>
+
+      <div class="field">
+        <label for="erro">Margem de erro do ciclo</label>
+        <div class="input-row"><input id="erro" data-step="1" type="text" inputmode="decimal" autocomplete="off"><span class="unit">%</span></div>
+        <p class="hint">Acréscimo sobre o ciclo para cobrir variações. Use 0 para calcular sem margem.</p>
+      </div>
+
+      <div class="field">
+        <label for="horas">Prazo para fechar a meta</label>
+        <div class="input-row"><input id="horas" data-step="1" type="text" inputmode="decimal" autocomplete="off"><span class="unit">horas</span></div>
+      </div>
+
+      <div class="field">
+        <label for="meta">Meta de produção</label>
+        <div class="input-row"><input id="meta" data-step="1" type="text" inputmode="decimal" autocomplete="off"><span class="unit">t</span></div>
+      </div>
+
+      <div class="field">
+        <label for="frota">CBs disponíveis <small>(opcional)</small></label>
+        <div class="input-row"><input id="frota" data-step="1" type="text" inputmode="numeric" autocomplete="off" placeholder="Ex.: 18"><span class="unit">CBs</span></div>
+        <p class="hint">Compara a sua frota com a necessária e mostra em quanto tempo ela fecha a meta.</p>
+      </div>
+
+      <fieldset>
+        <span class="legend">Regra de cálculo</span>
+        <div class="seg" role="radiogroup" aria-label="Regra de cálculo">
+          <label><input type="radio" name="modo" value="int" checked><span>Viagens completas<small>Conservador. Só conta ciclos fechados no prazo.</small></span></label>
+          <label><input type="radio" name="modo" value="frac"><span>Viagens fracionadas<small>Teórico. Ciclo contínuo, sem arredondar.</small></span></label>
+        </div>
+      </fieldset>
+
+      <details class="adv">
+        <summary>Ajustes avançados</summary>
+        <div class="two">
+          <div class="field">
+            <label for="cap">Carga por CB</label>
+            <div class="input-row"><input id="cap" type="text" inputmode="decimal" autocomplete="off"><span class="unit">t</span></div>
+          </div>
+          <div class="field">
+            <label for="ef">Eficiência</label>
+            <div class="input-row"><input id="ef" type="text" inputmode="decimal" autocomplete="off"><span class="unit">%</span></div>
+          </div>
+          <div class="field">
+            <label for="res">Reserva técnica</label>
+            <div class="input-row"><input id="res" type="text" inputmode="decimal" autocomplete="off"><span class="unit">%</span></div>
+          </div>
+        </div>
+        <p class="hint">Eficiência desconta paradas, troca de turno e refeição do tempo disponível (use 100% se o ciclo já embute isso). Reserva técnica soma CBs extras para manutenção.</p>
+      </details>
+    </section>
+
+    <section class="panel" id="panel" aria-live="polite" aria-labelledby="h-out">
+      <span class="label" id="h-out">CBs necessários para a meta</span>
+      <div class="big"><span class="n" id="out-n">—</span><span class="u">CBs</span></div>
+      <p class="sub" id="out-sub"></p>
+      <p class="sub" id="out-esc" hidden></p>
+      <p class="alert" id="out-alert" hidden></p>
+      <div class="fleet" id="fleet" hidden>
+        <span class="pill" id="fl-pill"></span>
+        <p id="fl-1"></p>
+        <p id="fl-2"></p>
+      </div>
+      <div class="compare" id="out-compare" hidden>
+        <div id="cmp-int"><span class="k">Viagens completas</span><span class="v" id="v-int">—</span></div>
+        <div id="cmp-frac"><span class="k">Viagens fracionadas</span><span class="v" id="v-frac">—</span></div>
+      </div>
+      <div class="actions">
+        <button type="button" id="copy">Copiar resumo</button>
+      </div>
+    </section>
+  </div>
+
+  <section class="card" aria-labelledby="h-tr">
+    <h2 id="h-tr">Acompanhamento do turno <small>Atualize durante a operação</small></h2>
+    <div class="track-in">
+      <div class="field">
+        <label for="real">Já transportado</label>
+        <div class="input-row"><input id="real" data-step="1" type="text" inputmode="decimal" autocomplete="off" placeholder="0"><span class="unit">t</span></div>
+      </div>
+      <div class="field">
+        <label for="dec">Tempo decorrido</label>
+        <div class="input-row"><input id="dec" data-step="1" type="text" inputmode="decimal" autocomplete="off" placeholder="0"><span class="unit">horas</span></div>
+      </div>
+    </div>
+    <div class="head-row"><span class="pill surface-pill" id="tr-pill" hidden></span><p class="track-msg" id="tr-msg" style="margin:0"></p></div>
+    <dl class="kpis" id="tr-kpis" hidden>
+      <div><dt>Realizado</dt><dd id="t-real">—</dd></div>
+      <div><dt>Ritmo atual</dt><dd id="t-ritmo">—</dd></div>
+      <div><dt>Ritmo necessário no restante</dt><dd id="t-nec">—</dd></div>
+      <div><dt>Projeção ao fim do prazo</dt><dd id="t-proj">—</dd></div>
+      <div><dt>CBs para o restante</dt><dd id="t-cbs">—</dd></div>
+      <div><dt>Reforço necessário</dt><dd id="t-ref">—</dd></div>
+    </dl>
+  </section>
+
+  <section class="card" aria-labelledby="h-kpi">
+    <h2 id="h-kpi">Indicadores da operação</h2>
+    <dl class="kpis">
+      <div><dt>Viagens necessárias</dt><dd id="k-viag">—</dd></div>
+      <div><dt>Viagens por CB no prazo</dt><dd id="k-vcb">—</dd></div>
+      <div><dt>Ritmo exigido pela meta</dt><dd id="k-tph">—</dd></div>
+      <div><dt>Produtividade por CB</dt><dd id="k-tphcb">—</dd></div>
+      <div><dt>Capacidade da frota no prazo</dt><dd id="k-capf">—</dd></div>
+      <div><dt>Folga sobre a meta</dt><dd id="k-folga">—</dd></div>
+      <div><dt>Utilização da frota</dt><dd id="k-util">—</dd></div>
+    </dl>
+  </section>
+
+  <section class="card" aria-labelledby="h-sch">
+    <details>
+      <summary id="h-sch">Meta hora a hora</summary>
+      <p class="hint" style="margin-bottom:12px">Ritmo linear até o fim do prazo. Use como régua para conferir o turno a cada hora.</p>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Hora</th><th class="num">Acumulado</th><th class="num">% da meta</th><th class="num">Viagens</th></tr></thead>
+          <tbody id="sch-body"></tbody>
+        </table>
+      </div>
+    </details>
+  </section>
+
+  <section class="card" aria-labelledby="h-sc">
+    <h2 id="h-sc">Quanto vale cada minuto de ciclo</h2>
+    <p class="hint" style="margin-bottom:12px">Mesma meta e mesmo prazo, variando só o tempo de ciclo. Mostra o que ganhar tempo em fila, carga ou descarga devolve em CBs.</p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Ciclo</th><th class="num">CBs</th><th>Frota</th><th class="num">Vs. atual</th></tr></thead>
+        <tbody id="sc-body"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="card" aria-labelledby="h-sv">
+    <h2 id="h-sv">Cenários salvos <small>Fica neste navegador</small></h2>
+    <div class="save-row">
+      <input id="sname" type="text" maxlength="40" autocomplete="off" placeholder="Nome do cenário, ex.: Turno A, chuva">
+      <button type="button" id="save" class="accent">Salvar cenário</button>
+    </div>
+    <ul class="saved" id="saved"></ul>
+    <p class="empty" id="saved-empty">Nenhum cenário salvo. Salve os parâmetros atuais para voltar a eles com um toque.</p>
+  </section>
+
+  <section class="card">
+    <details>
+      <summary>Como o cálculo funciona</summary>
+<pre class="formula">ciclo considerado   = ciclo × (1 + margem de erro)
+viagens necessárias = meta ÷ carga por CB          (arredonda para cima)
+tempo útil          = prazo × 60 × eficiência
+viagens por CB      = tempo útil ÷ ciclo           (completas: arredonda para baixo)
+CBs necessários     = viagens necessárias ÷ viagens por CB   (arredonda para cima)
+CBs a escalar       = CBs necessários + reserva técnica</pre>
+      <p class="foot">O modo conservador só conta ciclos fechados dentro da janela, o que protege a meta contra o ciclo quebrado no fim do turno. O fracionado serve como piso teórico e só se sustenta com CBs entrando e saindo de forma escalonada. No acompanhamento, o app refaz a conta só para a meta e as horas que restam, usando o mesmo ciclo.</p>
+    </details>
+  </section>
+</div>
+
+<div class="mini" id="mini" aria-hidden="true"><span class="n" id="mini-n">—</span><span class="u">CBs</span><span class="t" id="mini-t"></span></div>
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script>
+(function () {
+  'use strict';
+  var $ = function (id) { return document.getElementById(id); };
+  var nf = function (d) { return new Intl.NumberFormat('pt-BR', { maximumFractionDigits: d }); };
+  var f0 = nf(0), f1 = nf(1), f2 = nf(2);
+
+  var DEF = { ciclo: '1,4', un: 'h', erro: '5', horas: '8', meta: '3500', frota: '18', cap: '35', ef: '100', res: '0', modo: 'int', real: '1200', dec: '3' };
+  var FIELDS = ['ciclo', 'un', 'erro', 'horas', 'meta', 'frota', 'cap', 'ef', 'res', 'real', 'dec'];
+  var STEP = { ciclo: 0.05, erro: 1, horas: 0.5, meta: 100, frota: 1, cap: 1, ef: 5, res: 1, real: 50, dec: 0.5 };
+  var KEY = 'dfcb:v1', KEY_SAVED = 'dfcb:saved';
+
+  /* ---------- armazenamento (com fallback em memória) ---------- */
+  var mem = {};
+  function sget(k) { try { return localStorage.getItem(k); } catch (e) { return mem[k] || null; } }
+  function sset(k, v) { try { localStorage.setItem(k, v); } catch (e) { mem[k] = v; } }
+
+  /* ---------- números no formato brasileiro ---------- */
+  function parse(s) {
+    s = String(s == null ? '' : s).trim().replace(/\s/g, '');
+    if (!s) return NaN;
+    if (s.indexOf(',') > -1) s = s.replace(/\./g, '').replace(',', '.');
+    else if (/^\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g, '');
+    return Number(s);
+  }
+  function fmtIn(v) { return String(v).replace('.', ','); }
+  function fmtC(min, un) { return un === 'h' ? f2.format(min / 60) + ' h' : f1.format(min) + ' min'; }
+  function plural(n, a, b) { return n === 1 ? a : b; }
+
+  /* ---------- cálculo (funções puras) ---------- */
+  function solve(meta, horas, ciclo, cap, ef) {
+    var vf = horas * 60 * ef / ciclo;
+    var vi = Math.floor(vf + 1e-9);
+    var viag = Math.ceil(meta / cap - 1e-9);
+    return { vf: vf, vi: vi, viag: viag, cbsFrac: Math.ceil(viag / vf - 1e-9), cbsInt: vi > 0 ? Math.ceil(viag / vi) : null };
+  }
+  function pick(s, mode) {
+    if (mode === 'int' && s.cbsInt !== null) return { cbs: s.cbsInt, per: s.vi, forced: false };
+    return { cbs: s.cbsFrac, per: s.vf, forced: mode === 'int' };
+  }
+
+  function analyze(v) {
+    var keys = ['ciclo', 'erro', 'horas', 'meta', 'cap', 'ef', 'res', 'frota', 'real', 'dec'];
+    var n = {}, inv = {}, any = false;
+    keys.forEach(function (k) {
+      n[k] = parse(v[k]);
+      if (String(v[k]).trim() !== '' && isNaN(n[k])) inv[k] = 1;
+    });
+    if (isNaN(n.erro)) n.erro = 0;
+    if (isNaN(n.res)) n.res = 0;
+    if (isNaN(n.ef)) n.ef = 100;
+    if (!(n.ciclo > 0)) inv.ciclo = 1;
+    if (!(n.horas > 0)) inv.horas = 1;
+    if (!(n.meta > 0)) inv.meta = 1;
+    if (!(n.cap > 0)) inv.cap = 1;
+    if (!(n.ef > 0 && n.ef <= 100)) inv.ef = 1;
+    if (!(n.erro >= 0 && n.erro <= 100)) inv.erro = 1;
+    if (!(n.res >= 0 && n.res <= 100)) inv.res = 1;
+    ['frota', 'real', 'dec'].forEach(function (k) { if (!isNaN(n[k]) && n[k] < 0) inv[k] = 1; });
+    for (var k in inv) { any = true; break; }
+    if (any) return { ok: false, invalid: inv };
+
+    var un = v.un === 'min' ? 'min' : 'h', mode = v.modo === 'frac' ? 'frac' : 'int', ef = n.ef / 100;
+    var cicloBase = n.ciclo * (un === 'h' ? 60 : 1);
+    var cicloEf = cicloBase * (1 + n.erro / 100);
+    var sol = solve(n.meta, n.horas, cicloEf, n.cap, ef);
+    var c = pick(sol, mode);
+    var a = { ok: true, invalid: {}, n: n, un: un, mode: mode, ef: ef, cicloBase: cicloBase, cicloEf: cicloEf, sol: sol, c: c };
+    a.escalar = c.cbs + Math.ceil(c.cbs * n.res / 100 - 1e-9);
+    a.capFrota = c.cbs * c.per * n.cap;
+
+    a.fleet = null;
+    if (n.frota > 0) {
+      var N = Math.round(n.frota);
+      var rounds = (mode === 'int' && !c.forced) ? Math.ceil(sol.viag / N) : sol.viag / N;
+      var hClose = rounds * cicloEf / 60 / ef;
+      var capF = N * c.per * n.cap;
+      a.fleet = { N: N, capF: capF, ok: N >= c.cbs, faltaT: Math.max(0, n.meta - capF), faltaCb: Math.max(0, c.cbs - N), hClose: hClose, extra: hClose - n.horas };
+    }
+
+    a.track = null;
+    if (!isNaN(n.real)) {
+      if (!(n.dec > 0)) a.track = { need: 'dec' };
+      else {
+        var hRest = n.horas - n.dec, restante = Math.max(0, n.meta - n.real), ritmo = n.real / n.dec;
+        var t = { ritmo: ritmo, proj: ritmo * n.horas, restante: restante, hRest: hRest, done: restante === 0, over: hRest <= 0 && restante > 0, ritmoNec: hRest > 0 ? restante / hRest : null };
+        t.onTrack = t.proj >= n.meta - 1e-6;
+        if (!t.done && hRest > 0) {
+          var c2 = pick(solve(restante, hRest, cicloEf, n.cap, ef), mode);
+          t.cbsRest = c2.cbs;
+          t.faltaCb = n.frota > 0 ? Math.max(0, c2.cbs - Math.round(n.frota)) : null;
+        }
+        a.track = t;
+      }
+    }
+    return a;
+  }
+
+  /* ---------- estado do formulário ---------- */
+  var prevUn = 'h';
+  function getVals() {
+    var o = {};
+    FIELDS.forEach(function (k) { o[k] = $(k).value; });
+    o.modo = document.querySelector('input[name="modo"]:checked').value;
+    return o;
+  }
+  function setVals(o) {
+    FIELDS.forEach(function (k) { $(k).value = o[k] != null ? o[k] : DEF[k]; });
+    document.querySelector('input[name="modo"][value="' + (o.modo === 'frac' ? 'frac' : 'int') + '"]').checked = true;
+    prevUn = $('un').value;
+  }
+
+  /* ---------- pintura ---------- */
+  var raf = 0, saveTimer = 0, last = '';
+  function schedule() {
+    if (!raf) raf = requestAnimationFrame(function () { raf = 0; paint(); });
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(function () { sset(KEY, JSON.stringify(getVals())); }, 400);
+  }
+
+  function markInvalid(inv) {
+    FIELDS.forEach(function (k) { if (k !== 'un') $(k).setAttribute('aria-invalid', inv[k] ? 'true' : 'false'); });
+  }
+  function setHtml(id, h) { $(id).innerHTML = h; }
+  function show(id, on) { $(id).hidden = !on; }
+
+  function clearOut(msg) {
+    $('out-n').textContent = '—';
+    $('out-sub').textContent = msg;
+    ['out-esc', 'out-alert', 'fleet', 'out-compare', 'tr-kpis', 'tr-pill'].forEach(function (id) { show(id, false); });
+    ['k-viag', 'k-vcb', 'k-tph', 'k-tphcb', 'k-capf', 'k-folga', 'k-util'].forEach(function (id) { $(id).textContent = '—'; });
+    $('sc-body').innerHTML = ''; $('sch-body').innerHTML = ''; $('tr-msg').textContent = '';
+    $('mini-n').textContent = '—'; $('mini-t').textContent = '';
+    last = '';
+  }
+
+  function paint() {
+    var v = getVals(), a = analyze(v);
+    markInvalid(a.invalid);
+    if (!a.ok) { clearOut('Revise os campos em vermelho. Ciclo, prazo, meta e carga precisam ser maiores que zero; margem, reserva e eficiência ficam entre 0 e 100.'); return; }
+
+    var n = a.n, c = a.c, sol = a.sol, un = a.un, mode = a.mode, fl = a.fleet, tr = a.track;
+    var folga = a.capFrota - n.meta;
+
+    $('out-n').textContent = f0.format(c.cbs);
+    setHtml('out-sub', 'Cada CB faz <b>' + f1.format(c.per) + ' viagens</b> de ' + f1.format(n.cap) + ' t em ' + f1.format(n.horas) + ' h. A meta pede <b>' + f0.format(sol.viag) + ' viagens</b>.' +
+      (n.erro > 0 ? ' Ciclo considerado: <b>' + fmtC(a.cicloEf, un) + '</b> (' + fmtC(a.cicloBase, un) + ' + ' + f1.format(n.erro) + '% de erro).' : ''));
+
+    if (n.res > 0) { show('out-esc', true); setHtml('out-esc', 'Com <b>' + f1.format(n.res) + '% de reserva técnica</b>, escale <b>' + f0.format(a.escalar) + ' CBs</b>.'); }
+    else show('out-esc', false);
+
+    var al = $('out-alert');
+    if (c.forced) { al.hidden = false; al.textContent = 'O ciclo de ' + fmtC(a.cicloEf, un) + ' não fecha nem uma viagem completa em ' + f1.format(n.horas) + ' h. O resultado usa viagens fracionadas. Aumente o prazo ou reduza o ciclo.'; }
+    else al.hidden = true;
+
+    if (fl) {
+      show('fleet', true);
+      var pill = $('fl-pill');
+      pill.className = 'pill ' + (fl.ok ? 'ok' : 'warn');
+      pill.textContent = fl.ok ? 'Frota fecha a meta' : 'Frota não fecha a meta';
+      if (fl.ok) {
+        setHtml('fl-1', 'Com <b>' + f0.format(fl.N) + ' ' + plural(fl.N, 'CB', 'CBs') + '</b> a capacidade é de <b>' + f0.format(fl.capF) + ' t</b>, folga de ' + f0.format(fl.capF - n.meta) + ' t.');
+        setHtml('fl-2', 'Meta fechada em cerca de <b>' + f1.format(fl.hClose) + ' h</b>, ' + f1.format(Math.max(0, n.horas - fl.hClose)) + ' h antes do prazo.');
+      } else {
+        setHtml('fl-1', 'Com <b>' + f0.format(fl.N) + ' ' + plural(fl.N, 'CB', 'CBs') + '</b> a capacidade é de <b>' + f0.format(fl.capF) + ' t</b>. Faltam <b>' + f0.format(fl.faltaT) + ' t</b>. Reforce com <b>' + f0.format(fl.faltaCb) + ' ' + plural(fl.faltaCb, 'CB', 'CBs') + '</b>.');
+        setHtml('fl-2', 'Sem reforço, a meta fecha em cerca de <b>' + f1.format(fl.hClose) + ' h</b>, ' + f1.format(fl.extra) + ' h além do prazo.');
+      }
+    } else show('fleet', false);
+
+    show('out-compare', true);
+    $('v-int').textContent = sol.cbsInt === null ? 'não fecha' : f0.format(sol.cbsInt) + ' CBs';
+    $('v-frac').textContent = f0.format(sol.cbsFrac) + ' CBs';
+    $('cmp-int').className = (mode === 'int' && !c.forced) ? 'on' : '';
+    $('cmp-frac').className = (mode === 'frac' || c.forced) ? 'on' : '';
+
+    setHtml('k-viag', f0.format(sol.viag) + ' <small>viagens</small>');
+    setHtml('k-vcb', f1.format(c.per) + ' <small>viagens/CB</small>');
+    setHtml('k-tph', f1.format(n.meta / n.horas) + ' <small>t/h</small>');
+    setHtml('k-tphcb', f1.format(n.cap * 60 / a.cicloEf * a.ef) + ' <small>t/h por CB</small>');
+    setHtml('k-capf', f0.format(a.capFrota) + ' <small>t</small>');
+    setHtml('k-folga', f0.format(folga) + ' <small>t (' + f1.format(folga / n.meta * 100) + '%)</small>');
+    setHtml('k-util', f1.format(n.meta / a.capFrota * 100) + ' <small>%</small>');
+
+    paintTrack(a);
+    paintScenarios(a);
+    paintSchedule(a);
+
+    $('mini-n').textContent = f0.format(n.res > 0 ? a.escalar : c.cbs);
+    $('mini-t').textContent = n.res > 0 ? 'a escalar, com reserva' : (fl ? (fl.ok ? 'frota atual fecha a meta' : 'faltam ' + f0.format(fl.faltaCb) + ' ' + plural(fl.faltaCb, 'CB', 'CBs')) : 'para fechar a meta');
+
+    last = summary(a);
+  }
+
+  function paintTrack(a) {
+    var n = a.n, t = a.track, pill = $('tr-pill'), msg = $('tr-msg');
+    if (!t) { show('tr-kpis', false); pill.hidden = true; msg.textContent = 'Informe quanto já foi transportado e há quantas horas o turno começou.'; return; }
+    if (t.need) { show('tr-kpis', false); pill.hidden = true; msg.textContent = 'Falta informar o tempo decorrido.'; return; }
+    show('tr-kpis', true); pill.hidden = false;
+    var ok = t.done || (!t.over && t.onTrack);
+    pill.className = 'pill surface-pill ' + (ok ? 'ok' : 'warn');
+    pill.textContent = t.done ? 'Meta batida' : (t.over ? 'Prazo encerrado' : (t.onTrack ? 'No ritmo' : 'Abaixo do ritmo'));
+    var m;
+    if (t.done) m = 'A meta de <b>' + f0.format(n.meta) + ' t</b> já foi atingida.';
+    else if (t.over) m = 'O prazo acabou e faltaram <b>' + f0.format(t.restante) + ' t</b>.';
+    else {
+      m = 'Faltam <b>' + f0.format(t.restante) + ' t</b> em <b>' + f1.format(t.hRest) + ' h</b>. Precisa de <b>' + f0.format(t.cbsRest) + ' ' + plural(t.cbsRest, 'CB', 'CBs') + '</b> no restante';
+      if (t.faltaCb != null) m += t.faltaCb > 0 ? ', reforce com <b>' + f0.format(t.faltaCb) + '</b>.' : ', e a sua frota cobre.';
+      else m += '.';
+    }
+    setHtml('tr-msg', m);
+    setHtml('t-real', f0.format(n.real) + ' <small>t (' + f1.format(n.real / n.meta * 100) + '%)</small>');
+    setHtml('t-ritmo', f1.format(t.ritmo) + ' <small>t/h</small>');
+    setHtml('t-nec', t.ritmoNec == null ? '—' : f1.format(t.ritmoNec) + ' <small>t/h</small>');
+    setHtml('t-proj', f0.format(t.proj) + ' <small>t (' + f1.format(t.proj / n.meta * 100) + '%)</small>');
+    setHtml('t-cbs', t.cbsRest == null ? '—' : f0.format(t.cbsRest) + ' <small>CBs</small>');
+    setHtml('t-ref', t.faltaCb == null ? '—' : (t.faltaCb > 0 ? '+' + f0.format(t.faltaCb) : '0') + ' <small>CBs</small>');
+  }
+
+  function paintScenarios(a) {
+    var n = a.n, un = a.un, step = un === 'h' ? 6 : 5, rows = [];
+    [-3, -2, -1, 0, 1, 2, 3].forEach(function (k) {
+      var d = k * step, base = a.cicloBase + d;
+      if (base <= 0) return;
+      rows.push({ d: d, ciclo: base, cbs: pick(solve(n.meta, n.horas, base * (1 + n.erro / 100), n.cap, a.ef), a.mode).cbs });
+    });
+    var maxC = Math.max.apply(null, rows.map(function (x) { return x.cbs; }));
+    $('sc-body').innerHTML = rows.map(function (x) {
+      var diff = x.cbs - a.c.cbs;
+      var txt = x.d === 0 ? 'atual' : (diff === 0 ? 'igual' : (diff < 0 ? '−' : '+') + f0.format(Math.abs(diff)) + ' ' + plural(Math.abs(diff), 'CB', 'CBs'));
+      var cls = diff < 0 ? 'better' : (diff > 0 ? 'worse' : '');
+      var dl = x.d === 0 ? '' : ' <span class="hint">(' + (x.d > 0 ? '+' : '−') + (un === 'h' ? f2.format(Math.abs(x.d) / 60) + ' h' : Math.abs(x.d) + ' min') + ')</span>';
+      return '<tr class="' + (x.d === 0 ? 'cur' : '') + '"><td>' + fmtC(x.ciclo, un) + dl + '</td><td class="num">' + f0.format(x.cbs) + '</td><td><div class="bar"><i style="width:' + Math.max(4, x.cbs / maxC * 100) + '%"></i></div></td><td class="num ' + cls + '">' + txt + '</td></tr>';
+    }).join('');
+  }
+
+  function paintSchedule(a) {
+    var n = a.n, rows = [], total = Math.min(Math.ceil(n.horas - 1e-9), 48);
+    for (var i = 1; i <= total; i++) {
+      var t = Math.min(i, n.horas), acum = n.meta * t / n.horas;
+      rows.push('<tr><td>' + (i <= n.horas ? f0.format(i) : f1.format(n.horas)) + ' h</td><td class="num">' + f0.format(acum) + ' t</td><td class="num">' + f0.format(acum / n.meta * 100) + '%</td><td class="num">' + f0.format(Math.ceil(acum / n.cap - 1e-9)) + '</td></tr>');
+    }
+    if (n.horas < 1) rows = ['<tr><td>' + f1.format(n.horas) + ' h</td><td class="num">' + f0.format(n.meta) + ' t</td><td class="num">100%</td><td class="num">' + f0.format(a.sol.viag) + '</td></tr>'];
+    $('sch-body').innerHTML = rows.join('');
+  }
+
+  /* ---------- resumo para copiar (formato WhatsApp) ---------- */
+  function summary(a) {
+    var n = a.n, c = a.c, fl = a.fleet, tr = a.track, L = [];
+    L.push('*Dimensionamento de CBs*');
+    L.push('Meta: ' + f0.format(n.meta) + ' t em ' + f1.format(n.horas) + ' h');
+    L.push('Ciclo: ' + fmtC(a.cicloBase, a.un) + (n.erro > 0 ? ' + ' + f1.format(n.erro) + '% = ' + fmtC(a.cicloEf, a.un) : '') + ' · ' + f1.format(n.cap) + ' t por CB · eficiência ' + f0.format(n.ef) + '%');
+    L.push('*CBs necessários: ' + f0.format(c.cbs) + '*' + (n.res > 0 ? ' (escalar ' + f0.format(a.escalar) + ' com ' + f1.format(n.res) + '% de reserva)' : '') + ' · ' + (c.forced || a.mode === 'frac' ? 'viagens fracionadas' : 'viagens completas'));
+    L.push('Viagens: ' + f0.format(a.sol.viag) + ' no total · ' + f1.format(c.per) + ' por CB · ritmo exigido ' + f1.format(n.meta / n.horas) + ' t/h');
+    if (fl) L.push('Frota disponível: ' + f0.format(fl.N) + ' CBs · ' + (fl.ok ? 'fecha a meta' : 'faltam ' + f0.format(fl.faltaT) + ' t, reforçar ' + f0.format(fl.faltaCb) + ' CBs'));
+    if (tr && !tr.need) {
+      L.push('');
+      L.push('*Acompanhamento*: ' + f0.format(n.real) + ' t em ' + f1.format(n.dec) + ' h (' + f1.format(tr.ritmo) + ' t/h) · projeção ' + f0.format(tr.proj) + ' t');
+      if (!tr.done && !tr.over) L.push('Restante: ' + f0.format(tr.restante) + ' t em ' + f1.format(tr.hRest) + ' h · ' + f0.format(tr.cbsRest) + ' CBs necessários');
+    }
+    return L.join('\n');
+  }
+
+  /* ---------- toast e copiar ---------- */
+  var toastTimer = 0;
+  function toast(t) {
+    var el = $('toast'); el.textContent = t; el.hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { el.hidden = true; }, 2500);
+  }
+  function copyText(text, okMsg) {
+    var fallback = function () {
+      var ta = document.createElement('textarea');
+      ta.value = text; ta.setAttribute('readonly', ''); ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select();
+      try { document.execCommand('copy') ? toast(okMsg) : toast('Não foi possível copiar.'); } catch (e) { toast('Não foi possível copiar.'); }
+      document.body.removeChild(ta);
+    };
+    try { navigator.clipboard.writeText(text).then(function () { toast(okMsg); }, fallback); } catch (e) { fallback(); }
+  }
+  $('copy').addEventListener('click', function () {
+    if (!last) { toast('Corrija os campos antes de copiar.'); return; }
+    copyText(last, 'Resumo copiado.');
+  });
+
+  /* ---------- cenários salvos ---------- */
+  var saved = [];
+  function loadSaved() {
+    try { saved = JSON.parse(sget(KEY_SAVED) || '[]'); } catch (e) { saved = []; }
+    if (!Array.isArray(saved)) saved = [];
+  }
+  function renderSaved() {
+    var ul = $('saved'); ul.textContent = '';
+    saved.forEach(function (s) {
+      var a = analyze(s.v), li = document.createElement('li');
+      var load = document.createElement('button'); load.type = 'button'; load.className = 'load'; load.dataset.act = 'load'; load.dataset.id = s.id;
+      var b = document.createElement('b'); b.textContent = s.name;
+      var sp = document.createElement('span');
+      sp.textContent = a.ok ? f0.format(a.c.cbs) + ' CBs · ' + f0.format(a.n.meta) + ' t em ' + f1.format(a.n.horas) + ' h · ciclo ' + fmtC(a.cicloBase, a.un) : 'dados incompletos';
+      load.appendChild(b); load.appendChild(sp);
+      var del = document.createElement('button'); del.type = 'button'; del.className = 'del'; del.dataset.act = 'del'; del.dataset.id = s.id; del.textContent = 'Excluir';
+      del.setAttribute('aria-label', 'Excluir cenário ' + s.name);
+      li.appendChild(load); li.appendChild(del); ul.appendChild(li);
+    });
+    $('saved-empty').hidden = saved.length > 0;
+  }
+  $('save').addEventListener('click', function () {
+    var a = analyze(getVals());
+    if (!a.ok) { toast('Corrija os campos antes de salvar.'); return; }
+    if (saved.length >= 12) { toast('Limite de 12 cenários. Exclua algum para salvar outro.'); return; }
+    var name = $('sname').value.trim() || 'Cenário ' + (saved.length + 1);
+    saved.unshift({ id: String(Date.now()), name: name.slice(0, 40), v: getVals() });
+    sset(KEY_SAVED, JSON.stringify(saved));
+    $('sname').value = '';
+    renderSaved(); toast('Cenário salvo.');
+  });
+  $('sname').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); $('save').click(); } });
+  $('saved').addEventListener('click', function (e) {
+    var btn = e.target.closest('button[data-act]'); if (!btn) return;
+    var id = btn.dataset.id, s = saved.filter(function (x) { return x.id === id; })[0]; if (!s) return;
+    if (btn.dataset.act === 'load') { setVals(s.v); paint(); sset(KEY, JSON.stringify(getVals())); toast('Cenário carregado: ' + s.name); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+    else { saved = saved.filter(function (x) { return x.id !== id; }); sset(KEY_SAVED, JSON.stringify(saved)); renderSaved(); toast('Cenário excluído.'); }
+  });
+
+  /* ---------- produtividade nos campos ---------- */
+  function bump(id, dir) {
+    var s = (id === 'ciclo' && $('un').value === 'min') ? 1 : STEP[id];
+    var v = parse($(id).value); if (isNaN(v)) v = 0;
+    $(id).value = fmtIn(Math.max(0, Math.round((v + dir * s) * 1000) / 1000));
+    schedule();
+  }
+  document.querySelectorAll('input[data-step]').forEach(function (inp) {
+    var lab = document.querySelector('label[for="' + inp.id + '"]');
+    var name = lab ? lab.textContent.replace(/\(opcional\)/, '').trim() : inp.id;
+    [['−', -1, 'Diminuir '], ['+', 1, 'Aumentar ']].forEach(function (d) {
+      var b = document.createElement('button'); b.type = 'button'; b.className = 'st'; b.textContent = d[0]; b.tabIndex = -1;
+      b.setAttribute('aria-label', d[2] + name.toLowerCase());
+      b.addEventListener('click', function () { bump(inp.id, d[1]); });
+      inp.parentNode.insertBefore(b, inp.nextSibling && inp.nextSibling.className === 'st' ? inp.nextSibling.nextSibling : inp.nextSibling);
+    });
+  });
+  // garante a ordem − +
+  document.querySelectorAll('.input-row').forEach(function (row) {
+    var sts = row.querySelectorAll('.st');
+    if (sts.length === 2 && sts[0].textContent === '+') row.insertBefore(sts[1], sts[0]);
+  });
+
+  var textInputs = Array.prototype.slice.call(document.querySelectorAll('input[type="text"]')).filter(function (i) { return i.id !== 'sname'; });
+  textInputs.forEach(function (inp) {
+    inp.addEventListener('input', schedule);
+    inp.addEventListener('focus', function () { setTimeout(function () { try { inp.select(); } catch (e) {} }, 0); });
+    inp.addEventListener('keydown', function (e) {
+      if (e.key === 'ArrowUp' || e.key === 'ArrowDown') { e.preventDefault(); bump(inp.id, e.key === 'ArrowUp' ? 1 : -1); }
+      else if (e.key === 'Enter') {
+        e.preventDefault();
+        var vis = textInputs.filter(function (i) { return i.offsetParent !== null; });
+        var nx = vis[vis.indexOf(inp) + 1];
+        if (nx) nx.focus(); else inp.blur();
+      }
+    });
+  });
+
+  $('un').addEventListener('change', function () {
+    var v = parse($('ciclo').value), un = $('un').value;
+    if (v > 0 && un !== prevUn) $('ciclo').value = fmtIn(Math.round((un === 'min' ? v * 60 : v / 60) * 100) / 100);
+    prevUn = un; schedule();
+  });
+  document.querySelectorAll('input[name="modo"]').forEach(function (el) { el.addEventListener('change', schedule); });
+  $('reset').addEventListener('click', function () { setVals(DEF); paint(); sset(KEY, JSON.stringify(getVals())); toast('Valores de exemplo restaurados.'); });
+
+  /* barra fixa de resultado: aparece quando o painel sai da tela */
+  if ('IntersectionObserver' in window) {
+    new IntersectionObserver(function (en) {
+      $('mini').classList.toggle('show', !en[0].isIntersecting);
+    }).observe($('panel'));
+  }
+
+  /* ---------- início ---------- */
+  var init = DEF;
+  try { var st = JSON.parse(sget(KEY) || 'null'); if (st && typeof st === 'object') init = Object.assign({}, DEF, st); } catch (e) {}
+  setVals(init);
+  loadSaved(); renderSaved();
+  paint();
+})();
+</script>
+</body>
+</html>
